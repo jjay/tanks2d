@@ -3,6 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 public class ZoneBounds {
     public TerrainZone zone;
     public Bounds bounds;
@@ -101,11 +105,26 @@ public class TerrainZone : MonoBehaviour {
 
     }
 
+
+    #if UNITY_EDITOR
     public void OnDrawGizmos(){
-        foreach (ZoneBounds b in bounds){
-            Gizmos.DrawWireCube(b.bounds.center, b.bounds.size);
+        if (imutablePath == null) return;
+        QNode node = QTree.instance.LoadOrCreate(imutablePath);
+        if (node.terrain == null) return;
+
+        if (Camera.current == null || Camera.current.transform.position.z < -16){
+            return;
+        }
+
+        for (int x=0; x<QNode.BLOCK_SIZE; x++){
+            for (int y=0; y<QNode.BLOCK_SIZE; y++){
+                Vector3 pos = transform.position + new Vector3(x, y, 0);
+                //Handles.Label(pos, (100 * (float)activeNode.terrain[x,y].weight / (float)activeNode.totalWeights).ToString("F"));
+                Handles.Label(pos, node.terrain[x,y].weight.ToString("F"));
+            }
         }
     }
+    #endif
 
     public void AddTerrainElement(Vector3 position, TerrainType terrainType){
         GameController game = GameController.instance;

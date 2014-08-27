@@ -3,8 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
-using UnityEditor;
-
 public class GameController : MonoBehaviour {
     
     public GameObject treePrefab;
@@ -76,18 +74,6 @@ public class GameController : MonoBehaviour {
         }
     }
 
-    public void OnDrawGizmos(){
-        if (activeNode != null && activeNode.terrain != null){
-
-            for (int x=0; x<QNode.BLOCK_SIZE; x++){
-                for (int y=0; y<QNode.BLOCK_SIZE; y++){
-                    Vector3 pos = activeZone.transform.position + new Vector3(x, y, 0);
-                    //Handles.Label(pos, (100 * (float)activeNode.terrain[x,y].weight / (float)activeNode.totalWeights).ToString("F"));
-                    Handles.Label(pos, activeNode.terrain[x,y].weight.ToString("F"));
-                }
-            }
-        }
-    }
 
     public void ChangeActiveZone(TerrainZone newZone){
         byte relativePosition = 0;

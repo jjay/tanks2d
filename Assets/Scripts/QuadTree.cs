@@ -656,6 +656,9 @@ public class QTree {
         }
         return cache[path.imutable] = Create(path);
     }
+    public QNode LoadOrCreate(string imutablePath){
+        return LoadOrCreate(new QuadPath(imutablePath));
+    }
 
     public QNode LoadOrCreate(QuadPath path){
         QNode node = GetOrCreate(path);
