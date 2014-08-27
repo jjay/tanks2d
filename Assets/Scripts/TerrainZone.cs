@@ -79,6 +79,7 @@ public class TerrainZone : MonoBehaviour {
     public const byte LEFT = 4;
     public const byte RIGHT = 8;
 
+    public string imutablePath;
     public List<ZoneBounds> bounds;
     public Dictionary<byte, TerrainZone> adjacentZones;
 
@@ -106,29 +107,34 @@ public class TerrainZone : MonoBehaviour {
         }
     }
 
-    public void CreateChildren(QNode node){
+    public void AddTerrainElement(Vector3 position, TerrainType terrainType){
         GameController game = GameController.instance;
-        foreach (KeyValuePair<Vector3, TerrainType> pair in node.terrain){
-            GameObject go;
-            switch (pair.Value){
-                case TerrainType.Grass: 
-                    go = GameObject.Instantiate(game.grassPrefab) as GameObject; 
-                    break;
-                case TerrainType.Stone:
-                    go = GameObject.Instantiate(game.stonePrefab) as GameObject;
-                    break;
-                case TerrainType.Tree:
-                    go = GameObject.Instantiate(game.treePrefab) as GameObject;
-                    break;
-                case TerrainType.Water:
-                    go = GameObject.Instantiate(game.waterPrefab) as GameObject;
-                    break;
-                default:
-                    go = new GameObject("Empty");
-                    break;
-            }
-            go.transform.parent = transform;
-            go.transform.localPosition = pair.Key;
+        GameObject go;
+        switch (terrainType){
+            case TerrainType.Grass: 
+                go = GameObject.Instantiate(game.grassPrefab) as GameObject; 
+                break;
+            case TerrainType.Stone:
+                go = GameObject.Instantiate(game.stonePrefab) as GameObject;
+                break;
+            case TerrainType.Tree:
+                go = GameObject.Instantiate(game.treePrefab) as GameObject;
+                break;
+            case TerrainType.Water:
+                go = GameObject.Instantiate(game.waterPrefab) as GameObject;
+                break;
+            default:
+                go = new GameObject("Empty");
+                break;
+        }
+        go.transform.parent = transform;
+        go.transform.localPosition = position;
+    }
+
+    public void CreateChildren(QNode node){
+        imutablePath = node.path.imutable;
+        foreach (KeyValuePair<Vector3, TerrainType> pair in node.VisibleTerrain()){
+            AddTerrainElement(pair.Key, pair.Value);
         }
 
         float xPart = (float)QNode.BLOCK_SIZE / 3f;
@@ -174,31 +180,22 @@ public class TerrainZone : MonoBehaviour {
         Vector3 zonePosition = transform.position;
 
         if ( (pos&TOP) > 0 ){
-            node = game.tree.GetAdjacentTerrain(node, RelativePosition.Top);
+            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Top);
             zonePosition += Vector3.up * QNode.BLOCK_SIZE;
         } else if ( (pos&BOTTOM) > 0){
-            node = game.tree.GetAdjacentTerrain(node, RelativePosition.Bottom);
+            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Bottom);
             zonePosition += Vector3.down * QNode.BLOCK_SIZE;
         }
 
         if ( (pos&LEFT) > 0){
-            node = game.tree.GetAdjacentTerrain(node, RelativePosition.Left);
+            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Left);
             zonePosition += Vector3.left * QNode.BLOCK_SIZE;
         } else if ( (pos&RIGHT) > 0){
-            node = game.tree.GetAdjacentTerrain(node, RelativePosition.Right);
+            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Right);
             zonePosition += Vector3.right * QNode.BLOCK_SIZE;
         }
 
-        TerrainZone newZone = TerrainZone.FromQNode(node, zonePosition);
-        GameObject[] zones = GameObject.FindGameObjectsWithTag("TerrainZone");
-
-        foreach (GameObject go in zones){
-            TerrainZone zone = go.GetComponent<TerrainZone>();
-            // link newZone with eachOther
-            newZone.adjacentZones[newZone.DeterminateRelativePosition(zone)] = zone;
-            // link each other zone with newZone
-            zone.adjacentZones[zone.DeterminateRelativePosition(newZone)] = newZone;
-        }
+        game.CreateTerrainZone(node, zonePosition);
     }
 
     public void RemoveAdjacents(byte mask){
@@ -209,16 +206,7 @@ public class TerrainZone : MonoBehaviour {
             }
         }
         foreach (byte key in removeKeys){
-            TerrainZone removedZone = adjacentZones[key];
-            GameObject[] zones = GameObject.FindGameObjectsWithTag("TerrainZone");
-            foreach (GameObject go in zones){
-                TerrainZone zone = go.GetComponent<TerrainZone>();
-                //unlink removedZone from each other zones
-                removedZone.adjacentZones.Remove(removedZone.DeterminateRelativePosition(zone));
-                //unlink each other zone from removedZone
-                zone.adjacentZones.Remove(zone.DeterminateRelativePosition(removedZone));
-            }
-            GameObject.Destroy(removedZone.gameObject);
+            GameController.instance.RemoveTerrainZone(adjacentZones[key]);
         }
     }
 

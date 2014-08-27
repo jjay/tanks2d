@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
+using UnityEditor;
+
 public class GameController : MonoBehaviour {
     
     public GameObject treePrefab;
@@ -15,27 +17,28 @@ public class GameController : MonoBehaviour {
     [HideInInspector] public TerrainZone activeZone;
     [HideInInspector] public GameObject tank;
     [HideInInspector] public QNode activeNode;
-    [HideInInspector] public QTree tree;
 
     private ZoneBounds activeBounds;
+    private Dictionary<string, TerrainZone> zones;
 
     void Awake(){
         instance = this;
-        tree = new QTree(Path.Combine(Application.persistentDataPath, "qtree"));
-        Debug.Log(Application.persistentDataPath);
+        //PlayerPrefs.DeleteAll();
+        zones = new Dictionary<string, TerrainZone>();
+        QTree.instance.rootLocation = Path.Combine(Application.persistentDataPath, "qtree");
+        InvokeRepeating("GenerateGrass", 5, 5);
     }
-
 	// Use this for initialization
 	void Start () {
         Load();
-        activeZone = TerrainZone.FromQNode(activeNode);
+        activeZone = CreateTerrainZone(activeNode, Vector3.zero);
         tank = GameObject.Instantiate(tankPrefab) as GameObject;
         tank.transform.parent = activeZone.transform;
         tank.GetComponent<TankController>().Load();
 	}
 
     void Restart(){
-        tree.Clear();
+        QTree.instance.Clear();
         activeZone = null;
         activeNode = null;
         tank = null;
@@ -47,7 +50,7 @@ public class GameController : MonoBehaviour {
     }
 
     public void Load(){
-        activeNode = tree.GetTerrain(new QuadPath(PlayerPrefs.GetString("path", "3")));
+        activeNode = QTree.instance.GetTerrain(new QuadPath(PlayerPrefs.GetString("path", "3")));
     }
 
     public void Save(){
@@ -72,6 +75,19 @@ public class GameController : MonoBehaviour {
         }
     }
 
+    public void OnDrawGizmos(){
+        if (activeNode != null && activeNode.terrain != null){
+
+            for (int x=0; x<QNode.BLOCK_SIZE; x++){
+                for (int y=0; y<QNode.BLOCK_SIZE; y++){
+                    Vector3 pos = activeZone.transform.position + new Vector3(x, y, 0);
+                    //Handles.Label(pos, (100 * (float)activeNode.terrain[x,y].weight / (float)activeNode.totalWeights).ToString("F"));
+                    Handles.Label(pos, activeNode.terrain[x,y].weight.ToString("F"));
+                }
+            }
+        }
+    }
+
     public void ChangeActiveZone(TerrainZone newZone){
         byte relativePosition = 0;
         foreach (KeyValuePair<byte, TerrainZone> pair in activeZone.adjacentZones){
@@ -81,14 +97,14 @@ public class GameController : MonoBehaviour {
             }
         }
         if ((relativePosition & TerrainZone.TOP) > 0){
-            activeNode = tree.GetAdjacentTerrain(activeNode, RelativePosition.Top);
+            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Top);
         } else if ((relativePosition & TerrainZone.BOTTOM) > 0){
-            activeNode = tree.GetAdjacentTerrain(activeNode, RelativePosition.Bottom);
+            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Bottom);
         }
         if ((relativePosition & TerrainZone.LEFT) > 0){
-            activeNode = tree.GetAdjacentTerrain(activeNode, RelativePosition.Left);
+            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Left);
         } else if ((relativePosition & TerrainZone.RIGHT) > 0){
-            activeNode = tree.GetAdjacentTerrain(activeNode, RelativePosition.Right);
+            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Right);
         }
 
         tank.transform.parent = newZone.transform;
@@ -97,15 +113,53 @@ public class GameController : MonoBehaviour {
         tank.GetComponent<TankController>().Save();
     }
 
+    public TerrainZone CreateTerrainZone(QNode node, Vector3 zonePosition){
+        TerrainZone newZone = TerrainZone.FromQNode(node, zonePosition);
+        zones[node.path.imutable] = newZone;
+
+        foreach (TerrainZone zone in zones.Values){
+            // link newZone with eachOther
+            newZone.adjacentZones[newZone.DeterminateRelativePosition(zone)] = zone;
+            // link each other zone with newZone
+            zone.adjacentZones[zone.DeterminateRelativePosition(newZone)] = newZone;
+        }
+        return newZone;
+    }
+
+    public void RemoveTerrainZone(TerrainZone removedZone){
+        foreach (TerrainZone zone in zones.Values){
+            //unlink removedZone from each other zones
+            removedZone.adjacentZones.Remove(removedZone.DeterminateRelativePosition(zone));
+            //unlink each other zone from removedZone
+            zone.adjacentZones.Remove(zone.DeterminateRelativePosition(removedZone));
+        }
+        zones.Remove(removedZone.imutablePath);
+        GameObject.Destroy(removedZone.gameObject);
+    }
+
+    public void GenerateGrass(){
+        GeneratedVertexInfo info = QTree.instance.GenerateVertex();
+        if (info == null){
+            Debug.LogWarning("No avaible space for generating new grass");
+            return;
+        }
+        Debug.Log("Grass generated at " + info.node.path.Normalized().ToString() + "("  + info.x + ", " + info.y + "). Visible: " + zones.ContainsKey(info.node.path.imutable));
+        if (zones.ContainsKey(info.node.path.imutable)){
+            zones[info.node.path.imutable].AddTerrainElement(new Vector3(info.x, info.y, 0), TerrainType.Grass);
+        }
+    }
+
     void OnGUI(){
         //GUI.Label(new Rect(10, 10, 100, 50), activeNode.path.ToString());
         if (GUI.Button(new Rect(10, 10, 100, 50), "New Game")){
             Restart();
+        }
+
+        if (GUI.Button(new Rect(10, 70, 100, 50), "Generate Vertex")){
         }
     }
 
     void OnDestroy(){
         Save();
     }
-
 }
