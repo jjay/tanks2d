@@ -59,13 +59,14 @@
 Помимо ".terrain" файлов (вершин), на диск сохраняются "info" файлы - в них содержатся суммарные веса
 для каждого ребенка. В итоге, струткура файлов для примера выше выглядит так:
 
-root/info
-root/0/info
-root/0/1/info
-root/0/1/3.terrain
-root/1/info
-root/1/0/info
-root/1/0/2.terrain
+
+    root/info
+    root/0/info
+    root/0/1/info
+    root/0/1/3.terrain
+    root/1/info
+    root/1/0/info
+    root/1/0/2.terrain
 
 
 Первичное создание блоков
