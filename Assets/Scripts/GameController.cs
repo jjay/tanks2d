@@ -42,6 +42,7 @@ public class GameController : MonoBehaviour {
         activeZone = null;
         activeNode = null;
         tank = null;
+        zones.Clear();
         foreach (GameObject go in GameObject.FindGameObjectsWithTag("TerrainZone")){
             Destroy(go);
         }
@@ -143,19 +144,14 @@ public class GameController : MonoBehaviour {
             Debug.LogWarning("No avaible space for generating new grass");
             return;
         }
-        Debug.Log("Grass generated at " + info.node.path.Normalized().ToString() + "("  + info.x + ", " + info.y + "). Visible: " + zones.ContainsKey(info.node.path.imutable));
         if (zones.ContainsKey(info.node.path.imutable)){
             zones[info.node.path.imutable].AddTerrainElement(new Vector3(info.x, info.y, 0), TerrainType.Grass);
         }
     }
 
     void OnGUI(){
-        //GUI.Label(new Rect(10, 10, 100, 50), activeNode.path.ToString());
         if (GUI.Button(new Rect(10, 10, 100, 50), "New Game")){
             Restart();
-        }
-
-        if (GUI.Button(new Rect(10, 70, 100, 50), "Generate Vertex")){
         }
     }
 
