@@ -452,7 +452,7 @@ public class QNode {
     private void ReduceVertexWeight(int sourceX, int sourceY, int dx, int dy, bool reflective=false){
 
         QNode node = this;
-        float reduceFactor = 0.15f * (3 - Mathf.Max(Mathf.Abs(dx), Mathf.Max(dy)));
+        float reduceFactor = 0.15f * (3 - Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)));
         int x = (sourceX + dx + BLOCK_SIZE) % BLOCK_SIZE;
         int y = (sourceY + dy + BLOCK_SIZE) % BLOCK_SIZE;
         if (sourceX + dx < 0){
