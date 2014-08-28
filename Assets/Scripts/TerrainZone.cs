@@ -10,12 +10,12 @@ using UnityEditor;
 public class ZoneBounds {
     public TerrainZone zone;
     public Bounds bounds;
-    public byte boundsPosition;
+    public QuadRelation rel;
 
-    public ZoneBounds(TerrainZone zone, Bounds bounds, byte boundsPosition){
+    public ZoneBounds(TerrainZone zone, Bounds bounds, QuadRelation rel){
         this.zone = zone;
         this.bounds = bounds;
-        this.boundsPosition = boundsPosition;
+        this.rel = rel;
     }
 
     public void OnEnter(){
@@ -24,68 +24,56 @@ public class ZoneBounds {
             game.ChangeActiveZone(zone);
             return;
         }
-        if (boundsPosition == TerrainZone.CENTER){
-            zone.RemoveAdjacents(TerrainZone.TOP|TerrainZone.BOTTOM|TerrainZone.LEFT|TerrainZone.RIGHT);
+        if (rel == QuadRelation.Center){
+            zone.RemoveAdjacents(QuadRelation.Everything);
             return;
         }
 
-        byte removeFlags = 0;
-        if ((boundsPosition & TerrainZone.LEFT) > 0){
-            removeFlags |= TerrainZone.RIGHT;
-            zone.AddAdjacent(TerrainZone.LEFT);
-        }
-        if ((boundsPosition & TerrainZone.LEFT) == 0){
-            removeFlags |= TerrainZone.LEFT;
-        }
-        if ((boundsPosition & TerrainZone.RIGHT) > 0){
-            removeFlags |= TerrainZone.LEFT;
-            zone.AddAdjacent(TerrainZone.RIGHT);
-        }
-        if ((boundsPosition & TerrainZone.RIGHT) == 0){
-            removeFlags |= TerrainZone.RIGHT;
-        }
-        if ((boundsPosition & TerrainZone.TOP) > 0){
-            removeFlags |= TerrainZone.BOTTOM;
-            zone.AddAdjacent(TerrainZone.TOP);
-        }
-        if ((boundsPosition & TerrainZone.TOP) == 0){
-            removeFlags |= TerrainZone.TOP;
-        }
-        if ((boundsPosition & TerrainZone.BOTTOM) > 0){
-            removeFlags |= TerrainZone.TOP;
-            zone.AddAdjacent(TerrainZone.BOTTOM);
-        }
-        if ((boundsPosition & TerrainZone.BOTTOM) == 0){
-            removeFlags |= TerrainZone.BOTTOM;
-        }
-        if ((boundsPosition & (TerrainZone.TOP|TerrainZone.LEFT)) == (TerrainZone.TOP|TerrainZone.LEFT)){
-            zone.AddAdjacent(TerrainZone.TOP|TerrainZone.LEFT);
+        QuadRelation removeFlags = QuadRelation.Center;
+
+        if (rel & QuadRelation.Left){
+            removeFlags |= QuadRelation.Right;
+            zone.AddAdjacent(QuadRelation.Left);
+        } else {
+            removeFlags |= QuadRelation.Left;
         }
 
-        if ((boundsPosition & (TerrainZone.TOP|TerrainZone.RIGHT)) == (TerrainZone.TOP|TerrainZone.RIGHT)){
-            zone.AddAdjacent(TerrainZone.TOP|TerrainZone.RIGHT);
+        if (rel & QuadRelation.Right){
+            removeFlags |= QuadRelation.Left;
+            zone.AddAdjacent(QuadRelation.Right);
+        } else {
+            removeFlags |= QuadRelation.Right;
         }
 
-        if ((boundsPosition & (TerrainZone.BOTTOM|TerrainZone.LEFT)) == (TerrainZone.BOTTOM|TerrainZone.LEFT)){
-            zone.AddAdjacent(TerrainZone.BOTTOM|TerrainZone.LEFT);
+
+        if (rel & QuadRelation.Top){
+            removeFlags |= QuadRelation.Bottom;
+            zone.AddAdjacent(QuadRelation.Top);
+        } else {
+            removeFlags |= QuadRelation.Top;
         }
-        if ((boundsPosition & (TerrainZone.BOTTOM|TerrainZone.RIGHT)) == (TerrainZone.BOTTOM|TerrainZone.RIGHT)){
-            zone.AddAdjacent(TerrainZone.BOTTOM|TerrainZone.RIGHT);
+       
+        if (rel & QuadRelation.Bottom){
+            removeFlags |= QuadRelation.Top;
+            zone.AddAdjacent(QuadRelation.Bottom);
+        } else {
+            removeFlags |= QuadRelation.Bottom;
         }
+
+        if (rel == QuadRelation.TopLEft) zone.AddAdjacent(QuadRelation.TopLEft);
+        if (rel == QuadRelation.TopRight) zone.AddAdjacent(QuadRelation.TopRight);
+        if (rel == QuadRelation.BottomLeft) zone.AddAdjacent(QuadRelation.BottomLeft);
+        if (rel == QuadRelation.BottomRight) zone.AddAdjacent(QuadRelation.BottomRight);
+
         zone.RemoveAdjacents(removeFlags);
     }
 }
 
 public class TerrainZone : MonoBehaviour {
-    public const byte CENTER = 0;
-    public const byte TOP = 1;
-    public const byte BOTTOM = 2;
-    public const byte LEFT = 4;
-    public const byte RIGHT = 8;
 
     public string imutablePath;
     public List<ZoneBounds> bounds;
-    public Dictionary<byte, TerrainZone> adjacentZones;
+    public Dictionary<QuadRelation, TerrainZone> adjacentZones;
 
     public static TerrainZone FromQNode(QNode node, Vector3 position = default(Vector3)){
         GameObject go = new GameObject("Zone");
@@ -98,7 +86,7 @@ public class TerrainZone : MonoBehaviour {
 
     void Awake(){
         bounds = new List<ZoneBounds>();
-        adjacentZones = new Dictionary<byte, TerrainZone>();
+        adjacentZones = new Dictionary<QuadRelation, TerrainZone>();
     }
 
     void Start(){
@@ -112,9 +100,10 @@ public class TerrainZone : MonoBehaviour {
         QNode node = QTree.instance.LoadOrCreate(imutablePath);
         if (node.terrain == null) return;
 
-        if (Camera.current == null || Camera.current.transform.position.z < -16){
-            return;
-        }
+        if (Camera.current == null) return;
+        float visibleZone = (Camera.current.ViewportToWorldPoint(new Vector3(0, 0, 1)) - 
+            Camera.current.ViewportToWorldPoint(new Vector3(1, 1, 1))).magnitude;
+        if (visibleZone > 30) return;
 
         for (int x=0; x<QNode.BLOCK_SIZE; x++){
             for (int y=0; y<QNode.BLOCK_SIZE; y++){
@@ -156,76 +145,39 @@ public class TerrainZone : MonoBehaviour {
             AddTerrainElement(pair.Key, pair.Value);
         }
 
-        float xPart = (float)QNode.BLOCK_SIZE / 3f;
-        float yPart = (float)QNode.BLOCK_SIZE / 3f;
-        float xCenter = transform.position.x + (float)QNode.BLOCK_SIZE / 2f - 0.5f;
-        float yCenter = transform.position.y + (float)QNode.BLOCK_SIZE / 2f - 0.5f;
-        Vector3 size = new Vector3(xPart, yPart, 2);
-        for (byte pos=0; pos<16; pos++){
-            if ( (pos & (TOP|BOTTOM)) == (TOP|BOTTOM)) continue;
-            if ( (pos & (LEFT|RIGHT)) == (LEFT|RIGHT)) continue;
-            float x = (float)( xCenter - xPart * (pos&LEFT)/LEFT + xPart * (pos&RIGHT)/RIGHT);
-            float y = (float)( yCenter - yPart * (pos&BOTTOM)/BOTTOM + yPart * (pos&TOP)/TOP);
-            bounds.Add(new ZoneBounds(
-                this,
-                new Bounds(new Vector3(x, y, 0), size),
-                pos
-            ));
+
+        Vector3 size = new Vector3(QNode.BLOCK_SIZE/3f, QNode.BLOCK_SIZE/3f, 2);
+        float x = transform.position.x + (float)QNode.BLOCK_SIZE / 2f - 0.5f;
+        float y = transform.position.y + (float)QNode.BLOCK_SIZE / 2f - 0.5f;
+        foreach (QuadRelation rel in QuadRelation.All){
+            Vector3 boundsPosition = new Vector3(
+                x + rel.x * QNode.BLOCK_SIZE / 3f,
+                y + rel.y * QNode.BLOCK_SIZE / 3f,
+                0
+            );
+            bounds.Add(new ZoneBounds(this, new Bounds(boundsPosition, size), rel));
         }
     }
 
-    public byte DeterminateRelativePosition(TerrainZone adjacent){
-        byte pos = 0;
-        Vector3 delta = transform.position - adjacent.transform.position;
-        if ( delta.x > 0.1f){
-            pos |= LEFT;
-        } else if (delta.x < -0.1f){
-            pos |= RIGHT;
-        }
-        if ( delta.y > 0.1){
-            pos |= BOTTOM;
-        } else if (delta.y < -0.1f){
-            pos |= TOP;
-        }
-
-        return pos;
-    }
-
-
-    public void AddAdjacent(byte pos){
-        if (adjacentZones.ContainsKey(pos)) return;
+    public void AddAdjacent(QuadRelation relation){
+        if (adjacentZones.ContainsKey(relation)) return;
         GameController game = GameController.instance;
-        QNode node = game.activeNode;
-        Vector3 zonePosition = transform.position;
-
-        if ( (pos&TOP) > 0 ){
-            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Top);
-            zonePosition += Vector3.up * QNode.BLOCK_SIZE;
-        } else if ( (pos&BOTTOM) > 0){
-            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Bottom);
-            zonePosition += Vector3.down * QNode.BLOCK_SIZE;
-        }
-
-        if ( (pos&LEFT) > 0){
-            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Left);
-            zonePosition += Vector3.left * QNode.BLOCK_SIZE;
-        } else if ( (pos&RIGHT) > 0){
-            node = QTree.instance.GetAdjacentTerrain(node, RelativePosition.Right);
-            zonePosition += Vector3.right * QNode.BLOCK_SIZE;
-        }
+        Vector3 zonePosition = transform.position + 
+            new Vector3(QNode.BLOCK_SIZE * relation.x, QNode.BLOCK_SIZE * relation.y, 0);
+        QNode node = QTree.instance.GetAdjacentTerrain(game.activeNode, relation);
 
         game.CreateTerrainZone(node, zonePosition);
     }
 
-    public void RemoveAdjacents(byte mask){
-        List<byte> removeKeys = new List<byte>();
-        foreach (KeyValuePair<byte, TerrainZone> pair in adjacentZones){
-            if ( (pair.Key & mask) > 0) {
+    public void RemoveAdjacents(QuadRelation mask){
+        List<QuadRelation> removeKeys = new List<QuadRelation>();
+        foreach (KeyValuePair<QuadRelation, TerrainZone> pair in adjacentZones){
+            if ( pair.Key & mask ) {
                 removeKeys.Add(pair.Key);
             }
         }
-        foreach (byte key in removeKeys){
-            GameController.instance.RemoveTerrainZone(adjacentZones[key]);
+        foreach (QuadRelation relation in removeKeys){
+            GameController.instance.RemoveTerrainZone(adjacentZones[relation]);
         }
     }
 

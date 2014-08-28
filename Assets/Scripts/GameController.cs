@@ -19,13 +19,19 @@ public class GameController : MonoBehaviour {
     private ZoneBounds activeBounds;
     private Dictionary<string, TerrainZone> zones;
 
+    private const string API_VERSION = "1.2";
+
     void Awake(){
         instance = this;
-        //PlayerPrefs.DeleteAll();
         zones = new Dictionary<string, TerrainZone>();
         QTree.instance.rootLocation = Path.Combine(Application.persistentDataPath, "qtree");
+        if (PlayerPrefs.GetString("API", "0") != API_VERSION){
+            PlayerPrefs.DeleteAll();
+            QTree.instance.Clear();
+        }
         InvokeRepeating("GenerateGrass", 5, 5);
     }
+
 	// Use this for initialization
 	void Start () {
         Load();
@@ -33,6 +39,7 @@ public class GameController : MonoBehaviour {
         tank = GameObject.Instantiate(tankPrefab) as GameObject;
         tank.transform.parent = activeZone.transform;
         tank.GetComponent<TankController>().Load();
+        Save();
 	}
 
     void Restart(){
@@ -54,6 +61,7 @@ public class GameController : MonoBehaviour {
 
     public void Save(){
         PlayerPrefs.SetString("path", activeNode.path.ToString());
+        PlayerPrefs.SetString("API", API_VERSION);
     }
 
     public void Update(){
@@ -76,25 +84,8 @@ public class GameController : MonoBehaviour {
 
 
     public void ChangeActiveZone(TerrainZone newZone){
-        byte relativePosition = 0;
-        foreach (KeyValuePair<byte, TerrainZone> pair in activeZone.adjacentZones){
-            if (pair.Value == newZone) {
-                relativePosition = pair.Key;
-                break;
-            }
-        }
-        if ((relativePosition & TerrainZone.TOP) > 0){
-            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Top);
-        } else if ((relativePosition & TerrainZone.BOTTOM) > 0){
-            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Bottom);
-        }
-        if ((relativePosition & TerrainZone.LEFT) > 0){
-            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Left);
-        } else if ((relativePosition & TerrainZone.RIGHT) > 0){
-            activeNode = QTree.instance.GetAdjacentTerrain(activeNode, RelativePosition.Right);
-        }
-
         tank.transform.parent = newZone.transform;
+        activeNode = QTree.instance.LoadOrCreate(newZone.imutablePath);
         activeZone = newZone;
         Save();
         tank.GetComponent<TankController>().Save();
@@ -105,20 +96,24 @@ public class GameController : MonoBehaviour {
         zones[node.path.imutable] = newZone;
 
         foreach (TerrainZone zone in zones.Values){
+            QuadRelation relation = new QuadRelation(zone.transform.position - newZone.transform.position);
             // link newZone with eachOther
-            newZone.adjacentZones[newZone.DeterminateRelativePosition(zone)] = zone;
+            newZone.adjacentZones[relation] = zone;
             // link each other zone with newZone
-            zone.adjacentZones[zone.DeterminateRelativePosition(newZone)] = newZone;
+            zone.adjacentZones[relation.Flip()] = newZone;
         }
         return newZone;
     }
 
     public void RemoveTerrainZone(TerrainZone removedZone){
         foreach (TerrainZone zone in zones.Values){
+            QuadRelation relation = new QuadRelation(zone.transform.position - removedZone.transform.position);
             //unlink removedZone from each other zones
-            removedZone.adjacentZones.Remove(removedZone.DeterminateRelativePosition(zone));
+            //removedZone.adjacentZones.Remove(removedZone.DeterminateRelativePosition(zone));
+            removedZone.adjacentZones.Remove(relation);
             //unlink each other zone from removedZone
-            zone.adjacentZones.Remove(zone.DeterminateRelativePosition(removedZone));
+            //zone.adjacentZones.Remove(zone.DeterminateRelativePosition(removedZone));
+            zone.adjacentZones.Remove(relation.Flip());
         }
         zones.Remove(removedZone.imutablePath);
         GameObject.Destroy(removedZone.gameObject);

@@ -14,14 +14,6 @@ public enum TerrainType {
     Water
 }
 
-public enum RelativePosition {
-    Top,
-    Bottom,
-    Left,
-    Right
-}
-
-
 public class LRUCache<TKey, TValue> {
     Dictionary<TKey,TValue> dict;
     List<TKey> list;
@@ -64,28 +56,162 @@ public class LRUCache<TKey, TValue> {
     }
 }
 
-public struct Position {
-    public byte key;
-    public Position(byte _key){ key = _key; }
-    public Position(string _key){ key = Convert.ToByte(_key); }
-    public Position(char _key){ key = Convert.ToByte(_key); }
+public struct QuadRelation {
+    byte mask;
+    private const byte CENTER = 0;
+    private const byte TOP = 1;
+    private const byte BOTTOM = 2;
+    private const byte LEFT = 4;
+    private const byte RIGHT = 8;
 
-    public bool HasAdjacent(RelativePosition rel){
-        switch (rel){
-            case RelativePosition.Top: return (key|1) == 3;
-            case RelativePosition.Bottom: return (key|1) == 1;
-            case RelativePosition.Left: return (key|2) == 3; 
-            case RelativePosition.Right: return (key|2) == 2;
-            default: return false;
+    public static QuadRelation Center = new QuadRelation(CENTER);
+    public static QuadRelation Top = new QuadRelation(TOP);
+    public static QuadRelation Bottom = new QuadRelation(BOTTOM);
+    public static QuadRelation Left  = new QuadRelation(LEFT);
+    public static QuadRelation Right = new QuadRelation(RIGHT);
+    public static QuadRelation Everything = new QuadRelation(TOP|BOTTOM|LEFT|RIGHT);
+    public static QuadRelation TopLEft = new QuadRelation(TOP|LEFT);
+    public static QuadRelation TopRight = new QuadRelation(TOP|RIGHT);
+    public static QuadRelation BottomLeft = new QuadRelation(BOTTOM|LEFT);
+    public static QuadRelation BottomRight = new QuadRelation(BOTTOM|RIGHT);
+
+    public byte M { get { return mask; } }
+
+    public QuadRelation(byte mask){
+        this.mask = mask;
+    }
+
+    public QuadRelation(float x, float y){
+        this.mask = MaskFromCoordinates(x, y);
+    }
+
+    public QuadRelation(int x, int y){
+        this.mask = MaskFromCoordinates((float)x, (float)y);
+    }
+
+    public QuadRelation(Vector3 rel){
+        this.mask = MaskFromCoordinates(rel.x, rel.y);
+    }
+
+    public static bool operator ==(QuadRelation r1, QuadRelation r2){
+        return r1.mask == r2.mask;
+    }
+
+    public static bool operator !=(QuadRelation r1, QuadRelation r2){
+        return r1.mask != r2.mask;
+    }
+
+    public static QuadRelation operator |(QuadRelation r1, QuadRelation r2) {
+        return new QuadRelation((byte)(r1.mask|r2.mask));
+    }
+
+
+    public static IEnumerable<QuadRelation> All {
+        get {
+            for (byte pos=0; pos<16; pos++){
+                if ( (pos & (TOP|BOTTOM)) == (TOP|BOTTOM)) continue;
+                if ( (pos & (LEFT|RIGHT)) == (LEFT|RIGHT)) continue;
+                yield return new QuadRelation(pos);
+            }
         }
     }
 
-    public Position Flip(RelativePosition pos){
-        if (pos == RelativePosition.Top || pos == RelativePosition.Bottom){
-            return new Position( (byte)((2&(~(key&2))) | (1&key)) );
-        } else {
-            return new Position( (byte)((2&key) | (1&(~(key&1)))) );
+    public static QuadRelation operator &(QuadRelation r1, QuadRelation r2){
+        return new QuadRelation((byte)(r1.mask&r2.mask));
+    }
+
+    public static implicit operator bool(QuadRelation r){
+        return r.mask != 0;
+    }
+
+
+    public override bool Equals(object obj){
+        return ((QuadRelation)obj).mask == mask;
+    }
+
+    public override int GetHashCode(){
+        return (int)mask;
+    }
+
+    public int x {
+        get {
+            return (mask&RIGHT)/RIGHT - (mask&LEFT)/LEFT;
         }
+    }
+
+    public int y {
+        get {
+            return (mask&TOP)/TOP - (mask&BOTTOM)/BOTTOM;
+        }
+    }
+
+    public IEnumerable<QuadRelation> parts {
+        get {
+            if ((mask & LEFT) > 0) yield return QuadRelation.Left;
+            else if ((mask & RIGHT) > 0) yield return QuadRelation.Right;
+
+            if ((mask & TOP) > 0) yield return QuadRelation.Top;
+            else if ((mask & BOTTOM) > 0) yield return QuadRelation.Bottom;
+        }
+    }
+
+    public QuadRelation Flip(){
+        return new QuadRelation(-x, -y);
+    }
+
+    private static byte MaskFromCoordinates(float x, float y){
+        byte m = 0;
+        if ( x > 0.01 ) m|=RIGHT;
+        else if ( x < -0.01 ) m|=LEFT;
+        if ( y > 0.01 ) m|=TOP;
+        else if ( y < -0.1 ) m|= BOTTOM;
+        return m;
+    }
+
+    public override string ToString(){
+        switch (mask){
+            case 0: return "Center";
+            case 1: return "Top";
+            case 2: return "Bottom";
+            case 3: return "Vertical";
+            case 4: return "Left";
+            case 5: return "TopLeft";
+            case 6: return "BottomLeft";
+            case 7: return "AllExceptRight";
+            case 8: return "Right";
+            case 9: return "TopRight";
+            case 10: return "BottomRight";
+            case 11: return "AllExceptLeft";
+            case 12: return "Horizontal";
+            case 13: return "AllExceptBottom";
+            case 14: return "AllExceptTop";
+            case 15: return "Each";
+            default: return "Wrong";
+        }
+    }
+}
+
+public struct QuadOrientation {
+    public byte key;
+    public QuadOrientation(byte _key){ key = _key; }
+    public QuadOrientation(string _key){ key = Convert.ToByte(_key); }
+    public QuadOrientation(char _key){ key = Convert.ToByte(_key); }
+
+    public bool HasAdjacent(QuadRelation rel){
+        if (rel == QuadRelation.Top) return (key|1) == 3;
+        if (rel == QuadRelation.Bottom) return (key|1) == 1;
+        if (rel == QuadRelation.Left) return (key|2) == 3;
+        if (rel == QuadRelation.Right) return (key|2) == 2;
+        return false;
+    }
+
+    public QuadOrientation Flip(QuadRelation rel){
+        if ( rel & (QuadRelation.Top|QuadRelation.Bottom)) {
+            return new QuadOrientation( (byte)((2&(~(key&2))) | (1&key)) );
+        } else if (rel & (QuadRelation.Left|QuadRelation.Right)) {
+            return new QuadOrientation( (byte)((2&key) | (1&(~(key&1)))) );
+        }
+        return this;
     }
 
     public override string ToString(){
@@ -95,9 +221,9 @@ public struct Position {
 
 public class QuadPath {
 
-    public static QuadPath empty = new QuadPath(new List<Position>());
+    public static QuadPath empty = new QuadPath(new List<QuadOrientation>());
 
-    private List<Position> path;
+    private List<QuadOrientation> path;
 
     public QuadPath parent {
         get {
@@ -111,11 +237,11 @@ public class QuadPath {
         get { return path.Count == 0; }
     }
 
-    public Position position {
+    public QuadOrientation orientation{
         get { return path.Last(); }
     }
 
-    public Position root {
+    public QuadOrientation root {
         get {
             if (path.Count > 0) return path.First();
             throw new UnityException("QuadPath without root");
@@ -140,16 +266,16 @@ public class QuadPath {
     }
 
     public QuadPath Normalized(){
-        List<Position> history = QTree.instance.history.path;
+        List<QuadOrientation> history = QTree.instance.history.path;
         if (path.Count - history.Count == 1) return this;
         path = history.Take(history.Count - path.Count + 1).Concat(path).ToList();
         return this;
     }
     
     public QuadPath(string path){
-        this.path = new List<Position>();
+        this.path = new List<QuadOrientation>();
         foreach (string p in path.Split('/')){
-            this.path.Add(new Position(p));
+            this.path.Add(new QuadOrientation(p));
         }
     }
 
@@ -157,55 +283,55 @@ public class QuadPath {
         this.path = path.path;
     }
 
-    public QuadPath(List<Position> path){
+    public QuadPath(List<QuadOrientation> path){
         this.path = path;
     }
 
-    public QuadPath Child(Position pos){
-        List<Position> child = new List<Position>(path);
+    public QuadPath Child(QuadOrientation pos){
+        List<QuadOrientation> child = new List<QuadOrientation>(path);
         child.Add(pos);
         return new QuadPath(child);
     }
 
-    public QuadPath Grow(Position root){
-        List<Position> newPath = new List<Position>(path);
+    public QuadPath Grow(QuadOrientation root){
+        List<QuadOrientation> newPath = new List<QuadOrientation>(path);
         newPath.Insert(0, root);
         return new QuadPath(newPath);
     }
     
-    public QuadPath Grow(RelativePosition withFreeAdjacent){
-        if (withFreeAdjacent == RelativePosition.Top || withFreeAdjacent == RelativePosition.Right){
-            return Grow(new Position(2));
+    public QuadPath Grow(QuadRelation relation){
+        if (relation & QuadRelation.TopRight){
+            return Grow(new QuadOrientation(2));
         } else {
-            return Grow(new Position(1));
+            return Grow(new QuadOrientation(1));
         }
     }
 
-    public bool HasAdjacent(RelativePosition pos){
+    public bool HasAdjacent(QuadRelation rel){
         if (path.Count == 0) return false;
         Normalized();
-        foreach (Position currentPos in path.Reverse<Position>()){
-            if (currentPos.HasAdjacent(pos)) return true;
+        foreach (QuadOrientation currentPos in path.Reverse<QuadOrientation>()){
+            if (currentPos.HasAdjacent(rel)) return true;
         }
         return false;
     }
 
-    public QuadPath FindAdjacentPath(RelativePosition adjacent){
+    public QuadPath FindAdjacentPath(QuadRelation relation){
         if (path.Count == 0) return null;
         Normalized();
-        List<Position> sharedPath = new List<Position>();
+        List<QuadOrientation> sharedPath = new List<QuadOrientation>();
         bool adjacentFound = false;
-        foreach (Position pos in path.Reverse<Position>()){
+        foreach (QuadOrientation pos in path.Reverse<QuadOrientation>()){
             if (adjacentFound){
                 sharedPath.Add(pos);
             } else {
-                sharedPath.Add(pos.Flip(adjacent));
+                sharedPath.Add(pos.Flip(relation));
             }
-            if (pos.HasAdjacent(adjacent)){
+            if (pos.HasAdjacent(relation)){
                 adjacentFound = true;
             }
         }
-        return new QuadPath(sharedPath.Reverse<Position>().ToList());
+        return new QuadPath(sharedPath.Reverse<QuadOrientation>().ToList());
     }
 
     public override string ToString(){
@@ -303,7 +429,7 @@ public class QInfoNode {
         int i = -1;
         while (luck < chance) luck += weights[++i]/totalWeight;
 
-        QuadPath childpath = path.Child(new Position((byte)i));
+        QuadPath childpath = path.Child(new QuadOrientation((byte)i));
         if (QTree.instance.HasNode(childpath.ToString())){
             return QTree.instance.LoadOrCreate(childpath).GenerateVertex();
         } else {
@@ -339,7 +465,7 @@ public class QInfoNode {
         writer.Close();
 
         if (parent == null) return;
-        parent.weights[path.position.key] = totalWeight;
+        parent.weights[path.orientation.key] = totalWeight;
         parent.Save();
 
     }
@@ -347,7 +473,7 @@ public class QInfoNode {
 
 public class QNode {
 
-    public const int BLOCK_SIZE = 15;
+    public const int BLOCK_SIZE = 20;
 
     public QuadPath path;
     private QTree tree;
@@ -404,10 +530,10 @@ public class QNode {
 
     public void GenerateTerrain(){
         terrain = new WeightfullTerrain[BLOCK_SIZE,BLOCK_SIZE];
-        grassWeight = BLOCK_SIZE * (BLOCK_SIZE * BLOCK_SIZE - 50);
+        grassWeight = BLOCK_SIZE * (BLOCK_SIZE * BLOCK_SIZE - 70);
         
         // make terrain elements
-        for (int i = 0; i < 50; i++){
+        for (int i = 0; i < 70; i++){
             int x = 0;
             int y = 0;
             do {
@@ -451,19 +577,20 @@ public class QNode {
 
     private void ReduceVertexWeight(int sourceX, int sourceY, int dx, int dy, bool reflective=false){
 
-        QNode node = this;
         float reduceFactor = 0.15f * (3 - Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)));
         int x = (sourceX + dx + BLOCK_SIZE) % BLOCK_SIZE;
         int y = (sourceY + dy + BLOCK_SIZE) % BLOCK_SIZE;
+        QNode node = this;
+
         if (sourceX + dx < 0){
-            node = tree.GetOrCreate(node.path.FindAdjacentPath(RelativePosition.Left));
+            node = tree.GetOrCreate(node.path.FindAdjacentPath(QuadRelation.Left));
         } else if (sourceX + dx >= BLOCK_SIZE){
-            node = tree.GetOrCreate(node.path.FindAdjacentPath(RelativePosition.Right));
+            node = tree.GetOrCreate(node.path.FindAdjacentPath(QuadRelation.Right));
         }
         if (sourceY + dy < 0){
-            node = tree.GetOrCreate(node.path.FindAdjacentPath(RelativePosition.Bottom));
+            node = tree.GetOrCreate(node.path.FindAdjacentPath(QuadRelation.Bottom));
         } else if (sourceY + dy >= BLOCK_SIZE){
-            node = tree.GetOrCreate(node.path.FindAdjacentPath(RelativePosition.Top));
+            node = tree.GetOrCreate(node.path.FindAdjacentPath(QuadRelation.Top));
         }
 
         if (terrain[sourceX,sourceY].affectWeights){
@@ -528,21 +655,8 @@ public class QNode {
         writer.Close();
         QInfoNode info = new QInfoNode(path.parent);
         info.Load();
-        info.weights[path.position.key] = grassWeight;
+        info.weights[path.orientation.key] = grassWeight;
         info.Save();
-    }
-
-    
-    public void UpdateWeights(){
-        /*
-        QNode node = this;
-        do {
-            QNode parent = tree.LoadOrCreate(node.path.parent);
-            parent.weights[node.path.position.key] = node.totalWeights;
-            parent.SaveCurrent();
-            node = parent;
-        } while (!node.path.isRoot);
-        */
     }
 
     public IEnumerable<KeyValuePair<Vector3,TerrainType>> VisibleTerrain(){
@@ -594,7 +708,7 @@ public class QTree {
         return root;
     }
     
-    public void Reparent(Position newParent){
+    public void Reparent(QuadOrientation newParent){
         history = history.Grow(newParent);
         PlayerPrefs.SetString("TreeHistory", history.ToString());
         string[] dirs = Directory.GetDirectories(rootLocation);
@@ -635,11 +749,16 @@ public class QTree {
         return node;
     }
 
-    public QNode GetAdjacentTerrain(QNode terrain, RelativePosition adjacent){
-        if (terrain.path.HasAdjacent(adjacent)) return GetTerrain(terrain.path.FindAdjacentPath(adjacent));
-        terrain.path = terrain.path.Grow(adjacent);
-        Reparent(terrain.path.root);
-        return GetTerrain(terrain.path.FindAdjacentPath(adjacent));
+    public QNode GetAdjacentTerrain(QNode terrain, QuadRelation relation){
+        QuadPath path = terrain.path;
+        foreach (QuadRelation relationPart in relation.parts){
+            if (!path.HasAdjacent(relationPart)){
+                path = path.Grow(relationPart);
+                Reparent(path.root);
+            }
+            path = path.FindAdjacentPath(relationPart);
+        }
+        return GetTerrain(path);
     }
 
     public bool HasNode(string path){
@@ -656,6 +775,7 @@ public class QTree {
         }
         return cache[path.imutable] = Create(path);
     }
+
     public QNode LoadOrCreate(string imutablePath){
         return LoadOrCreate(new QuadPath(imutablePath));
     }

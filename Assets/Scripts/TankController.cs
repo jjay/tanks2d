@@ -36,8 +36,8 @@ public class TankController : MonoBehaviour {
 
     public void Load(){
         transform.localPosition = new Vector3(
-            PlayerPrefs.GetFloat("x", 5),
-            PlayerPrefs.GetFloat("y", 5),
+            PlayerPrefs.GetFloat("x", QNode.BLOCK_SIZE * 0.5f),
+            PlayerPrefs.GetFloat("y", QNode.BLOCK_SIZE * 0.5f),
             -1
         );
         transform.localRotation = Quaternion.Euler(0, 0, PlayerPrefs.GetFloat("r", 0));
